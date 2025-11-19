@@ -26,6 +26,9 @@ ob_start();
 .post-form button {
     margin-top: 12px;
 }
+.post-form .file-input {
+    margin-top: 12px;
+}
 .posts-container {
     display: flex;
     flex-direction: column;
@@ -60,6 +63,18 @@ ob_start();
     line-height: 1.6;
     white-space: pre-wrap;
     word-wrap: break-word;
+}
+.post-image {
+    margin-top: 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #f8fafc;
+}
+.post-image img {
+    display: block;
+    width: 100%;
+    height: auto;
 }
 .loading {
     text-align: center;
@@ -106,8 +121,9 @@ ob_start();
 <h2>Posts</h2>
 
 <div class="post-form">
-    <form method="POST" action="/posts" id="postForm">
+    <form method="POST" action="/posts" id="postForm" enctype="multipart/form-data">
         <textarea name="content" placeholder="What's on your mind, <?= htmlspecialchars($user['name']) ?>?" required></textarea>
+        <input type="file" name="image" accept="image/*">
         <button type="submit">Post</button>
     </form>
 </div>
@@ -152,14 +168,22 @@ async function loadPosts() {
                 const postDate = new Date(post.created_at);
                 const timeAgo = getTimeAgo(postDate);
                 
+                const rawImagePath = post.image_url || post.image_path || '';
+                const imagePath = typeof rawImagePath === 'string' ? rawImagePath.trim() : '';
+                const imageHtml = imagePath !== ''
+                    ? `<div class="post-image"><img src="${escapeHtml(imagePath)}" alt="Post image" loading="lazy"></div>`
+                    : '';
+
                 postCard.innerHTML = `
                     <div class="post-header">
                         <span class="post-author">${escapeHtml(post.user_name)}</span>
                         <span class="post-time">${timeAgo}</span>
                     </div>
                     <div class="post-content">${escapeHtml(post.content)}</div>
+                    ${imageHtml}
                 `;
                 
+
                 container.appendChild(postCard);
             });
             

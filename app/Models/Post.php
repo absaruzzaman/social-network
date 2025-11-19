@@ -4,6 +4,11 @@ namespace App\Models;
 use PDO;
 
 class Post {
+    /**
+     * Cached flag to avoid repeatedly checking the posts table structure.
+     */
+    private static ?bool $hasImagePathColumn = null;
+
     private static function connect(): PDO {
         $host = getenv('DB_HOST') ?: '127.0.0.1';
         $db = getenv('DB_NAME') ?: 'metro_web_class';
@@ -17,10 +22,30 @@ class Post {
         return $pdo;
     }
 
-    public static function create(int $userId, string $content): int {
-        $stmt = self::connect()->prepare('INSERT INTO posts (user_id, content) VALUES (?, ?)');
-        $stmt->execute([$userId, $content]);
-        return (int)self::connect()->lastInsertId();
+    private static function postsTableHasImagePath(PDO $pdo): bool {
+        if (self::$hasImagePathColumn !== null) {
+            return self::$hasImagePathColumn;
+        }
+
+        $stmt = $pdo->prepare("SHOW COLUMNS FROM posts LIKE 'image_path'");
+        $stmt->execute();
+        self::$hasImagePathColumn = (bool)$stmt->fetch();
+
+        return self::$hasImagePathColumn;
+    }
+
+    public static function create(int $userId, string $content, ?string $imagePath = null): int {
+        $pdo = self::connect();
+
+        if (self::postsTableHasImagePath($pdo)) {
+            $stmt = $pdo->prepare('INSERT INTO posts (user_id, content, image_path) VALUES (?, ?, ?)');
+            $stmt->execute([$userId, $content, $imagePath ?? '']);
+        } else {
+            $stmt = $pdo->prepare('INSERT INTO posts (user_id, content) VALUES (?, ?)');
+            $stmt->execute([$userId, $content]);
+        }
+
+        return (int)$pdo->lastInsertId();
     }
 
     public static function getAll(int $limit = 10, int $offset = 0): array {
@@ -38,4 +63,3 @@ class Post {
         return $stmt->fetchAll();
     }
 }
-
