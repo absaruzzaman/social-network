@@ -4,16 +4,28 @@ namespace App\Core;
 class Router {
     private array $routes = [];
 
+    private function normalizePath(string $path): string {
+        if ($path === '') {
+            return '/';
+        }
+
+        $normalized = '/' . ltrim($path, '/');
+        return rtrim($normalized, '/') ?: '/';
+    }
+
     public function get(string $path, callable $callback): void {
-        $this->routes['GET'][$path] = $callback;
+        $normalized = $this->normalizePath($path);
+        $this->routes['GET'][$normalized] = $callback;
     }
 
     public function post(string $path, callable $callback): void {
-        $this->routes['POST'][$path] = $callback;
+        $normalized = $this->normalizePath($path);
+        $this->routes['POST'][$normalized] = $callback;
     }
 
     public function dispatch(string $uri, string $method): void {
-        $path = parse_url($uri, PHP_URL_PATH) ?: '/';
+        $rawPath = parse_url($uri, PHP_URL_PATH) ?: '/';
+        $path = $this->normalizePath($rawPath);
         $callback = $this->routes[$method][$path] ?? null;
         
         if (!$callback) {

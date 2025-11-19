@@ -50,6 +50,11 @@ ob_start();
     align-items: center;
     margin-bottom: 12px;
 }
+.post-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
 .post-author {
     font-weight: 600;
     color: #374151;
@@ -57,6 +62,22 @@ ob_start();
 .post-time {
     font-size: 12px;
     color: #9ca3af;
+}
+.post-actions {
+    display: flex;
+    gap: 8px;
+}
+.post-actions button {
+    background: #2563eb;
+    color: #fff;
+    border: none;
+    padding: 6px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+}
+.post-actions button:hover {
+    background: #1e40af;
 }
 .post-content {
     color: #1f2937;
@@ -102,6 +123,48 @@ ob_start();
     color: #991b1b;
     border: 1px solid #fca5a5;
 }
+.modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    padding: 16px;
+}
+.modal.open {
+    display: flex;
+}
+.modal-content {
+    background: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    width: min(480px, 100%);
+    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+}
+.modal-content h3 {
+    margin-top: 0;
+    margin-bottom: 12px;
+}
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 12px;
+}
+.modal-actions .secondary {
+    background: #e5e7eb;
+    color: #374151;
+}
+.modal .message {
+    margin-bottom: 12px;
+}
+.current-image {
+    margin-top: 8px;
+    color: #6b7280;
+    font-size: 13px;
+}
 </style>
 
 <?php if (Session::get('success')): ?>
@@ -131,65 +194,134 @@ ob_start();
 <div class="posts-container" id="postsContainer">
     <div class="loading">Loading posts...</div>
 </div>
+<div class="modal" id="editModal">
+    <div class="modal-content">
+        <h3>Edit post</h3>
+        <div class="message error" id="editError" style="display: none;"></div>
+        <form id="editForm">
+            <input type="hidden" name="id" id="editPostId">
+            <textarea name="content" id="editContent" required></textarea>
+            <input type="file" name="image" accept="image/*">
+            <div class="current-image" id="currentImageInfo"></div>
+            <div class="modal-actions">
+                <button type="button" class="secondary" id="cancelEdit">Cancel</button>
+                <button type="submit">Save changes</button>
+            </div>
+        </form>
+    </div>
+</div>
 
 <script>
+const currentUserId = <?= (int)$user['id'] ?>;
 let currentPage = 1;
 let isLoading = false;
 let hasMore = true;
+const postsById = new Map();
+
+const editModal = document.getElementById('editModal');
+const editForm = document.getElementById('editForm');
+const editContent = document.getElementById('editContent');
+const editPostId = document.getElementById('editPostId');
+const editError = document.getElementById('editError');
+const currentImageInfo = document.getElementById('currentImageInfo');
+const cancelEditBtn = document.getElementById('cancelEdit');
+
+function generatePostHtml(post, timeAgo, imageHtml, actionsHtml) {
+    return `
+        <div class="post-header">
+            <span class="post-author">${escapeHtml(post.user_name)}</span>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span class="post-time">${timeAgo}</span>
+                ${actionsHtml}
+            </div>
+        </div>
+        <div class="post-content">${escapeHtml(post.content)}</div>
+        ${imageHtml}
+    `;
+}
+
+function attachEditHandler(card, post) {
+    const editBtn = card.querySelector('.edit-btn');
+    if (editBtn) {
+        editBtn.addEventListener('click', () => openEditDialog(post.id));
+    }
+}
+
+function buildPostCard(post) {
+    postsById.set(post.id, post);
+    const postCard = document.createElement('div');
+    postCard.className = 'post-card';
+    postCard.dataset.postId = post.id;
+
+    const postDate = new Date(post.created_at);
+    const timeAgo = getTimeAgo(postDate);
+
+    const rawImagePath = (post.image_url || post.image_path || '').trim();
+    const imageHtml = rawImagePath !== ''
+        ? `<div class="post-image"><img src="${escapeHtml(rawImagePath)}" alt="Post image" loading="lazy"></div>`
+        : '';
+
+    const actionsHtml = post.user_id === currentUserId
+        ? `<div class="post-actions"><button type="button" class="edit-btn" data-post-id="${post.id}">Edit</button></div>`
+        : '';
+
+    postCard.innerHTML = generatePostHtml(post, timeAgo, imageHtml, actionsHtml);
+    attachEditHandler(postCard, post);
+    return postCard;
+}
+
+function updatePostCard(post) {
+    const card = document.querySelector(`[data-post-id="${post.id}"]`);
+    if (!card) return;
+
+    postsById.set(post.id, post);
+
+    const postDate = new Date(post.created_at);
+    const timeAgo = getTimeAgo(postDate);
+    const rawImagePath = (post.image_url || post.image_path || '').trim();
+    const imageHtml = rawImagePath !== ''
+        ? `<div class="post-image"><img src="${escapeHtml(rawImagePath)}" alt="Post image" loading="lazy"></div>`
+        : '';
+    const actionsHtml = post.user_id === currentUserId
+        ? `<div class="post-actions"><button type="button" class="edit-btn" data-post-id="${post.id}">Edit</button></div>`
+        : '';
+
+    card.innerHTML = generatePostHtml(post, timeAgo, imageHtml, actionsHtml);
+    attachEditHandler(card, post);
+}
+
 
 async function loadPosts() {
     if (isLoading || !hasMore) return;
 
-    console.log('Loading posts, page:', currentPage);
     isLoading = true;
 
     try {
         const response = await fetch(`/api/posts?page=${currentPage}`);
-        console.log('Response received:', response.status);
         const data = await response.json();
-        console.log('Data:', data);
 
         if (!data.success) {
             throw new Error(data.error || 'Failed to load posts');
         }
 
-        if (data.success && data.posts.length > 0) {
+        if (data.posts.length > 0) {
             const container = document.getElementById('postsContainer');
-            
-            // Remove loading message on first load
+
             if (currentPage === 1) {
                 container.innerHTML = '';
             }
             
+
             data.posts.forEach(post => {
-                const postCard = document.createElement('div');
-                postCard.className = 'post-card';
-                
-                const postDate = new Date(post.created_at);
-                const timeAgo = getTimeAgo(postDate);
-                
-                const rawImagePath = post.image_url || post.image_path || '';
-                const imagePath = typeof rawImagePath === 'string' ? rawImagePath.trim() : '';
-                const imageHtml = imagePath !== ''
-                    ? `<div class="post-image"><img src="${escapeHtml(imagePath)}" alt="Post image" loading="lazy"></div>`
-                    : '';
-
-                postCard.innerHTML = `
-                    <div class="post-header">
-                        <span class="post-author">${escapeHtml(post.user_name)}</span>
-                        <span class="post-time">${timeAgo}</span>
-                    </div>
-                    <div class="post-content">${escapeHtml(post.content)}</div>
-                    ${imageHtml}
-                `;
-                
-
+                const postCard = buildPostCard(post);
                 container.appendChild(postCard);
             });
             
+
             hasMore = data.hasMore;
             currentPage++;
             
+
             if (!hasMore) {
                 const noMore = document.createElement('div');
                 noMore.className = 'no-more';
@@ -206,8 +338,78 @@ async function loadPosts() {
         }
     }
     
+
     isLoading = false;
 }
+
+function showEditError(message) {
+    editError.textContent = message;
+    editError.style.display = 'block';
+}
+
+function clearEditError() {
+    editError.textContent = '';
+    editError.style.display = 'none';
+}
+
+function openEditDialog(postId) {
+    const post = postsById.get(postId);
+    if (!post) return;
+
+    clearEditError();
+    editForm.reset();
+    editPostId.value = post.id;
+    editContent.value = post.content;
+
+    const rawImagePath = (post.image_url || post.image_path || '').trim();
+    currentImageInfo.textContent = rawImagePath !== ''
+        ? `Current image will be kept unless you upload a new one.`
+        : '';
+
+    editModal.classList.add('open');
+    editContent.focus();
+}
+
+function closeEditDialog() {
+    editModal.classList.remove('open');
+    editForm.reset();
+    clearEditError();
+}
+
+editForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    clearEditError();
+
+    const formData = new FormData(editForm);
+
+    try {
+        const response = await fetch('/posts/update', {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await response.json();
+        if (!data.success) {
+            throw new Error(data.error || 'Failed to update post');
+        }
+
+        if (data.post) {
+            updatePostCard(data.post);
+        }
+
+        closeEditDialog();
+    } catch (error) {
+        showEditError(error.message);
+    }
+});
+
+cancelEditBtn.addEventListener('click', () => closeEditDialog());
+editModal.addEventListener('click', (event) => {
+    if (event.target === editModal) {
+        closeEditDialog();
+    }
+});
+
 
 function escapeHtml(text) {
     const div = document.createElement('div');
@@ -218,23 +420,104 @@ function escapeHtml(text) {
 function getTimeAgo(date) {
     const seconds = Math.floor((new Date() - date) / 1000);
     
+
     if (seconds < 60) return 'just now';
     if (seconds < 3600) return Math.floor(seconds / 60) + ' minutes ago';
     if (seconds < 86400) return Math.floor(seconds / 3600) + ' hours ago';
     if (seconds < 604800) return Math.floor(seconds / 86400) + ' days ago';
     
+
     return date.toLocaleDateString();
 }
 
 // Infinite scroll
 window.addEventListener('scroll', () => {
     if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 500) {
-        console.log('here')
-        console.log('window.innerHeight',window.innerHeight)
-        console.log('document.body.offsetHeight',document.body.offsetHeight)
         loadPosts();
     }
 });
+
+async function openEditDialog(post, card) {
+    const updatedContent = prompt('Edit your post:', post.content);
+
+    if (updatedContent === null) {
+        return;
+    }
+
+    const trimmed = updatedContent.trim();
+
+    if (trimmed.length === 0) {
+        alert('Post content cannot be empty.');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('post_id', post.id);
+    formData.append('content', trimmed);
+
+    try {
+        const response = await fetch('/posts/update', {
+            method: 'POST',
+            body: formData
+        });
+
+        const contentType = response.headers.get('content-type') || '';
+        let result = null;
+
+        if (contentType.includes('application/json')) {
+            result = await response.json();
+        } else {
+            const text = await response.text();
+            throw new Error(response.ok ? 'Unexpected response from server.' : `Request failed (${response.status}). ${text}`);
+        }
+
+        if (!response.ok || !result.success) {
+            throw new Error(result?.error || 'Failed to update post');
+        }
+
+        post.content = trimmed;
+        const contentElement = card.querySelector('.post-content');
+        if (contentElement) {
+            contentElement.textContent = trimmed;
+        }
+
+        const updatedImage = result.post?.image_url || result.post?.image_path || '';
+        const trimmedImage = typeof updatedImage === 'string' ? updatedImage.trim() : '';
+        const existingImage = card.querySelector('.post-image img');
+
+        if (trimmedImage) {
+            if (existingImage) {
+                existingImage.src = trimmedImage;
+            } else {
+                const imageWrapper = document.createElement('div');
+                imageWrapper.className = 'post-image';
+                const img = document.createElement('img');
+                img.alt = 'Post image';
+                img.loading = 'lazy';
+                img.src = trimmedImage;
+                imageWrapper.appendChild(img);
+                card.appendChild(imageWrapper);
+            }
+        }
+
+        showTemporaryMessage('success', 'Post updated successfully.');
+    } catch (error) {
+        console.error('Failed to update post:', error);
+        showTemporaryMessage('error', error.message || 'Unable to update post.');
+    }
+}
+
+function showTemporaryMessage(type, text) {
+    const container = document.createElement('div');
+    container.className = `message ${type}`;
+    container.textContent = text;
+
+    const postsContainer = document.querySelector('.posts-container');
+    postsContainer.parentNode.insertBefore(container, postsContainer);
+
+    setTimeout(() => container.remove(), 4000);
+}
+
 
 // Load initial posts
 loadPosts();

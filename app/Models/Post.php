@@ -62,4 +62,48 @@ class Post {
         $stmt->execute();
         return $stmt->fetchAll();
     }
+
+    public static function find(int $id): ?array {
+        $pdo = self::connect();
+        $stmt = $pdo->prepare('SELECT * FROM posts WHERE id = :id LIMIT 1');
+        $stmt->bindValue(':id', $id, PDO::PARAM_INT);
+        $stmt->execute();
+
+        $post = $stmt->fetch();
+        return $post !== false ? $post : null;
+    }
+
+    public static function findWithUser(int $id): ?array {
+        $pdo = self::connect();
+        $stmt = $pdo->prepare('
+            SELECT p.*, u.name as user_name
+            FROM posts p
+            JOIN users u ON p.user_id = u.id
+            WHERE p.id = :id
+            LIMIT 1
+        ');
+        $stmt->bindValue(':id', $id, PDO::PARAM_INT);
+        $stmt->execute();
+
+        $post = $stmt->fetch();
+        return $post !== false ? $post : null;
+    }
+
+    public static function update(int $id, int $userId, string $content, ?string $imagePath = null): bool {
+        $pdo = self::connect();
+
+        if (self::postsTableHasImagePath($pdo)) {
+            $stmt = $pdo->prepare('UPDATE posts SET content = :content, image_path = :image_path WHERE id = :id AND user_id = :user_id');
+            $stmt->bindValue(':image_path', $imagePath ?? '');
+        } else {
+            $stmt = $pdo->prepare('UPDATE posts SET content = :content WHERE id = :id AND user_id = :user_id');
+        }
+
+        $stmt->bindValue(':content', $content);
+        $stmt->bindValue(':id', $id, PDO::PARAM_INT);
+        $stmt->bindValue(':user_id', $userId, PDO::PARAM_INT);
+        $stmt->execute();
+
+        return $stmt->rowCount() > 0;
+    }
 }

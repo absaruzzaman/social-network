@@ -131,4 +131,68 @@ class PostController extends Controller {
             ]);
         }
     }
+
+    public function update() {
+        header('Content-Type: application/json');
+
+        $user = Session::get('user');
+        if (!$user) {
+            http_response_code(401);
+            echo json_encode(['success' => false, 'error' => 'Unauthorized']);
+            return;
+        }
+
+        $postId = (int)($_POST['id'] ?? 0);
+        $content = trim($_POST['content'] ?? '');
+
+        if ($postId < 1) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Invalid post ID']);
+            return;
+        }
+
+        if (strlen($content) < 1) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Post content cannot be empty.']);
+            return;
+        }
+
+        $post = Post::find($postId);
+        if (!$post) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'Post not found']);
+            return;
+        }
+
+        if ((int)$post['user_id'] !== (int)$user['id']) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'error' => 'You are not allowed to edit this post.']);
+            return;
+        }
+
+        $imagePath = $post['image_path'] ?? null;
+
+        try {
+            $newImage = $this->handleImageUpload($_FILES['image'] ?? null);
+            if ($newImage !== null) {
+                $imagePath = $newImage;
+            }
+        } catch (\RuntimeException $e) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+            return;
+        }
+
+        Post::update($postId, (int)$user['id'], $content, $imagePath);
+
+        $updatedPost = Post::findWithUser($postId);
+        if ($updatedPost && isset($updatedPost['image_path']) && trim((string)$updatedPost['image_path']) !== '') {
+            $updatedPost['image_url'] = url($updatedPost['image_path']);
+        }
+
+        echo json_encode([
+            'success' => true,
+            'post' => $updatedPost
+        ]);
+    }
 }
