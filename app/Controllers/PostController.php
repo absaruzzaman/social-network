@@ -104,17 +104,25 @@ class PostController extends Controller {
         header('Content-Type: application/json');
 
         try {
+            $user = Session::get('user');
+            if (!$user) {
+                http_response_code(401);
+                echo json_encode(['success' => false, 'error' => 'Unauthorized']);
+                return;
+            }
+
             $page = (int)($_GET['page'] ?? 1);
             $limit = 10;
             $offset = ($page - 1) * $limit;
 
-            $posts = Post::getAll($limit, $offset);
+            $posts = Post::getAll($limit, $offset, (int)$user['id']);
 
             foreach ($posts as &$post) {
                 $path = trim((string)($post['image_path'] ?? ''));
                 if ($path !== '') {
                     $post['image_url'] = url($path);
                 }
+                $post['is_following'] = (bool)($post['is_following'] ?? false);
             }
             unset($post);
 

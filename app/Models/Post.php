@@ -48,21 +48,25 @@ class Post {
         return (int)$pdo->lastInsertId();
     }
 
-    public static function getAll(int $limit = 10, int $offset = 0): array {
+    public static function getAll(int $limit = 10, int $offset = 0, ?int $currentUserId = null): array {
         $pdo = self::connect();
         $stmt = $pdo->prepare('
-            SELECT p.*, u.name as user_name
+            SELECT
+                p.*, 
+                u.name as user_name,
+                CASE WHEN f.follower_id IS NULL THEN 0 ELSE 1 END AS is_following
             FROM posts p
             JOIN users u ON p.user_id = u.id
+            LEFT JOIN follows f ON f.following_id = p.user_id AND f.follower_id = :current_user_id
             ORDER BY p.created_at DESC
             LIMIT :limit OFFSET :offset
         ');
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+        $stmt->bindValue(':current_user_id', $currentUserId, $currentUserId === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
         $stmt->execute();
         return $stmt->fetchAll();
     }
-
     public static function find(int $id): ?array {
         $pdo = self::connect();
         $stmt = $pdo->prepare('SELECT * FROM posts WHERE id = :id LIMIT 1');

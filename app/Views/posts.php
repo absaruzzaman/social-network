@@ -55,6 +55,19 @@ ob_start();
     align-items: center;
     gap: 12px;
 }
+.follow-btn {
+    background: #10b981;
+    padding: 6px 10px;
+    font-size: 13px;
+}
+.follow-btn.following {
+    background: #e5e7eb;
+    color: #374151;
+    border: 1px solid #d1d5db;
+}
+.follow-btn.following:hover {
+    background: #d1d5db;
+}
 .post-author {
     font-weight: 600;
     color: #374151;
@@ -232,11 +245,15 @@ const editError = document.getElementById('editError');
 const currentImageInfo = document.getElementById('currentImageInfo');
 const cancelEditBtn = document.getElementById('cancelEdit');
 const postsContainer = document.getElementById('postsContainer');
+const followStateByUser = new Map();
 
-function generatePostHtml(post, timeAgo, imageHtml, actionsHtml) {
+function generatePostHtml(post, timeAgo, imageHtml, actionsHtml, followButtonHtml) {
     return `
         <div class="post-header">
-            <span class="post-author">${escapeHtml(post.user_name)}</span>
+            <div class="post-meta">
+                <span class="post-author">${escapeHtml(post.user_name)}</span>
+                ${followButtonHtml}
+            </div>
             <div style="display: flex; align-items: center; gap: 8px;">
                 <span class="post-time">${timeAgo}</span>
                 ${actionsHtml}
@@ -285,9 +302,66 @@ function attachDeleteHandler(card, post) {
     });
 }
 
+function getFollowingState(userId, defaultState = false) {
+    if (!followStateByUser.has(userId)) {
+        followStateByUser.set(userId, Boolean(defaultState));
+    }
+
+    return followStateByUser.get(userId);
+}
+
+function setFollowingState(userId, isFollowing) {
+    followStateByUser.set(userId, isFollowing);
+
+    document.querySelectorAll(`.follow-btn[data-user-id="${userId}"]`).forEach(button => {
+        button.dataset.following = isFollowing ? 'true' : 'false';
+        button.textContent = isFollowing ? 'Unfollow' : 'Follow';
+        button.classList.toggle('following', isFollowing);
+    });
+}
+
+function buildFollowButton(userId, isFollowing = false) {
+    const following = getFollowingState(userId, isFollowing);
+    const followingClass = following ? ' following' : '';
+    const label = following ? 'Unfollow' : 'Follow';
+
+    return `<button type="button" class="follow-btn${followingClass}" data-user-id="${userId}" data-following="${following ? 'true' : 'false'}">${label}</button>`;
+}
+
+function attachFollowHandler(card, post) {
+    const followBtn = card.querySelector('.follow-btn');
+    if (!followBtn) return;
+
+    followBtn.addEventListener('click', async () => {
+        const targetUserId = parseInt(followBtn.dataset.userId, 10);
+        const isCurrentlyFollowing = followBtn.dataset.following === 'true';
+        const endpoint = isCurrentlyFollowing ? '/users/unfollow' : '/users/follow';
+
+        const formData = new FormData();
+        formData.append('user_id', targetUserId);
+
+        try {
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                body: formData
+            });
+
+            const data = await response.json();
+            if (!data.success) {
+                throw new Error(data.error || 'Unable to update follow status');
+            }
+
+            setFollowingState(targetUserId, data.is_following);
+        } catch (error) {
+            window.alert('Failed to update follow status: ' + error.message);
+        }
+    });
+}
+
 function attachPostActions(card, post) {
     attachEditHandler(card, post);
     attachDeleteHandler(card, post);
+    attachFollowHandler(card, post);
 }
 
 function buildPostCard(post) {
@@ -295,6 +369,7 @@ function buildPostCard(post) {
     const postCard = document.createElement('div');
     postCard.className = 'post-card';
     postCard.dataset.postId = post.id;
+    postCard.dataset.authorId = post.user_id;
 
     const postDate = new Date(post.created_at);
     const timeAgo = getTimeAgo(postDate);
@@ -304,10 +379,14 @@ function buildPostCard(post) {
         ? `<div class="post-image"><img src="${escapeHtml(rawImagePath)}" alt="Post image" loading="lazy"></div>`
         : '';
 
+    const followButtonHtml = post.user_id === currentUserId
+        ? ''
+        : buildFollowButton(post.user_id, post.is_following);
+
     const actionsHtml = post.user_id === currentUserId
         ? `<div class="post-actions"><button type="button" class="edit-btn" data-post-id="${post.id}">Edit</button><button type="button" class="delete-btn" data-post-id="${post.id}">Delete</button></div>`
         : '';
-    postCard.innerHTML = generatePostHtml(post, timeAgo, imageHtml, actionsHtml);
+    postCard.innerHTML = generatePostHtml(post, timeAgo, imageHtml, actionsHtml, followButtonHtml);
     attachPostActions(postCard, post);
     return postCard;
 }
@@ -328,7 +407,7 @@ function updatePostCard(post) {
         ? `<div class="post-actions"><button type="button" class="edit-btn" data-post-id="${post.id}">Edit</button><button type="button" class="delete-btn" data-post-id="${post.id}">Delete</button></div>`
         : '';
 
-    card.innerHTML = generatePostHtml(post, timeAgo, imageHtml, actionsHtml);
+    card.innerHTML = generatePostHtml(post, timeAgo, imageHtml, actionsHtml, '');
     attachPostActions(card, post);
 }
 
@@ -357,6 +436,7 @@ async function loadPosts() {
             data.posts.forEach(post => {
                 const postCard = buildPostCard(post);
                 container.appendChild(postCard);
+                setFollowingState(post.user_id, getFollowingState(post.user_id, post.is_following));
             });
             
 
