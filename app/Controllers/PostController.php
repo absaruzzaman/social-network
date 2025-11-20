@@ -195,4 +195,65 @@ class PostController extends Controller {
             'post' => $updatedPost
         ]);
     }
+        public function delete() {
+        header('Content-Type: application/json');
+
+        $user = Session::get('user');
+        if (!$user) {
+            http_response_code(401);
+            echo json_encode(['success' => false, 'error' => 'Unauthorized']);
+            return;
+        }
+
+        $postId = (int)($_POST['id'] ?? 0);
+        if ($postId < 1) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Invalid post ID']);
+            return;
+        }
+
+        $post = Post::find($postId);
+        if (!$post) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'Post not found']);
+            return;
+        }
+
+        if ((int)$post['user_id'] !== (int)$user['id']) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'error' => 'You are not allowed to delete this post.']);
+            return;
+        }
+
+        $imagePath = $post['image_path'] ?? '';
+
+        if (!Post::delete($postId, (int)$user['id'])) {
+            http_response_code(500);
+            echo json_encode(['success' => false, 'error' => 'Failed to delete post. Please try again.']);
+            return;
+        }
+
+        $this->removeImageFiles($imagePath);
+
+        echo json_encode(['success' => true]);
+    }
+
+    private function removeImageFiles(?string $imagePath): void {
+        $normalizedPath = trim((string)$imagePath);
+        if ($normalizedPath === '') {
+            return;
+        }
+
+        $rootDir = dirname(__DIR__, 2);
+        $paths = [
+            $rootDir . '/' . ltrim($normalizedPath, '/'),
+            $rootDir . '/public/' . ltrim($normalizedPath, '/')
+        ];
+
+        foreach ($paths as $path) {
+            if (is_file($path)) {
+                @unlink($path);
+            }
+        }
+    }
 }

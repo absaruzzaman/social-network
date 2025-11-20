@@ -79,6 +79,12 @@ ob_start();
 .post-actions button:hover {
     background: #1e40af;
 }
+.post-actions .delete-btn {
+    background: #dc2626;
+}
+.post-actions .delete-btn:hover {
+    background: #b91c1c;
+}
 .post-content {
     color: #1f2937;
     line-height: 1.6;
@@ -225,6 +231,7 @@ const editPostId = document.getElementById('editPostId');
 const editError = document.getElementById('editError');
 const currentImageInfo = document.getElementById('currentImageInfo');
 const cancelEditBtn = document.getElementById('cancelEdit');
+const postsContainer = document.getElementById('postsContainer');
 
 function generatePostHtml(post, timeAgo, imageHtml, actionsHtml) {
     return `
@@ -247,6 +254,42 @@ function attachEditHandler(card, post) {
     }
 }
 
+function attachDeleteHandler(card, post) {
+    const deleteBtn = card.querySelector('.delete-btn');
+    if (!deleteBtn) return;
+
+    deleteBtn.addEventListener('click', async () => {
+        const confirmed = window.confirm('Delete this post? This action cannot be undone.');
+        if (!confirmed) return;
+
+        try {
+            const formData = new FormData();
+            formData.append('id', post.id);
+
+            const response = await fetch('/posts/delete', {
+                method: 'POST',
+                body: formData
+            });
+
+            const data = await response.json();
+            if (!data.success) {
+                throw new Error(data.error || 'Failed to delete post');
+            }
+
+            postsById.delete(post.id);
+            card.remove();
+            showEmptyStateIfNeeded();
+        } catch (error) {
+            window.alert('Failed to delete post: ' + error.message);
+        }
+    });
+}
+
+function attachPostActions(card, post) {
+    attachEditHandler(card, post);
+    attachDeleteHandler(card, post);
+}
+
 function buildPostCard(post) {
     postsById.set(post.id, post);
     const postCard = document.createElement('div');
@@ -262,11 +305,10 @@ function buildPostCard(post) {
         : '';
 
     const actionsHtml = post.user_id === currentUserId
-        ? `<div class="post-actions"><button type="button" class="edit-btn" data-post-id="${post.id}">Edit</button></div>`
+        ? `<div class="post-actions"><button type="button" class="edit-btn" data-post-id="${post.id}">Edit</button><button type="button" class="delete-btn" data-post-id="${post.id}">Delete</button></div>`
         : '';
-
     postCard.innerHTML = generatePostHtml(post, timeAgo, imageHtml, actionsHtml);
-    attachEditHandler(postCard, post);
+    attachPostActions(postCard, post);
     return postCard;
 }
 
@@ -283,11 +325,11 @@ function updatePostCard(post) {
         ? `<div class="post-image"><img src="${escapeHtml(rawImagePath)}" alt="Post image" loading="lazy"></div>`
         : '';
     const actionsHtml = post.user_id === currentUserId
-        ? `<div class="post-actions"><button type="button" class="edit-btn" data-post-id="${post.id}">Edit</button></div>`
+        ? `<div class="post-actions"><button type="button" class="edit-btn" data-post-id="${post.id}">Edit</button><button type="button" class="delete-btn" data-post-id="${post.id}">Delete</button></div>`
         : '';
 
     card.innerHTML = generatePostHtml(post, timeAgo, imageHtml, actionsHtml);
-    attachEditHandler(card, post);
+    attachPostActions(card, post);
 }
 
 
@@ -329,12 +371,12 @@ async function loadPosts() {
                 container.appendChild(noMore);
             }
         } else if (currentPage === 1) {
-            document.getElementById('postsContainer').innerHTML = '<div class="no-more">No posts yet. Be the first to post!</div>';
+            postsContainer.innerHTML = '<div class="no-more">No posts yet. Be the first to post!</div>';
         }
     } catch (error) {
         console.error('Error loading posts:', error);
         if (currentPage === 1) {
-            document.getElementById('postsContainer').innerHTML = '<div class="message error">Failed to load posts: ' + error.message + '</div>';
+            postsContainer.innerHTML = '<div class="message error">Failed to load posts: ' + error.message + '</div>';
         }
     }
     
@@ -428,6 +470,13 @@ function getTimeAgo(date) {
     
 
     return date.toLocaleDateString();
+}
+
+function showEmptyStateIfNeeded() {
+    const hasPosts = postsContainer.querySelector('.post-card');
+    if (!hasPosts) {
+        postsContainer.innerHTML = '<div class="no-more">No posts yet. Be the first to post!</div>';
+    }
 }
 
 // Infinite scroll

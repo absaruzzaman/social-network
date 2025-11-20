@@ -106,4 +106,14 @@ class Post {
 
         return $stmt->rowCount() > 0;
     }
+    
+    public static function delete(int $id, int $userId): bool {
+        $pdo = self::connect();
+        $stmt = $pdo->prepare('DELETE FROM posts WHERE id = :id AND user_id = :user_id');
+        $stmt->bindValue(':id', $id, PDO::PARAM_INT);
+        $stmt->bindValue(':user_id', $userId, PDO::PARAM_INT);
+        $stmt->execute();
+
+        return $stmt->rowCount() > 0;
+    }
 }
