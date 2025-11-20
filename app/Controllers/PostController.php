@@ -123,6 +123,8 @@ class PostController extends Controller {
                     $post['image_url'] = url($path);
                 }
                 $post['is_following'] = (bool)($post['is_following'] ?? false);
+                $post['is_liked'] = (bool)($post['is_liked'] ?? false);
+                $post['like_count'] = (int)($post['like_count'] ?? 0);
             }
             unset($post);
 
@@ -193,9 +195,14 @@ class PostController extends Controller {
 
         Post::update($postId, (int)$user['id'], $content, $imagePath);
 
-        $updatedPost = Post::findWithUser($postId);
+        $updatedPost = Post::findWithUser($postId, (int)$user['id']);
         if ($updatedPost && isset($updatedPost['image_path']) && trim((string)$updatedPost['image_path']) !== '') {
             $updatedPost['image_url'] = url($updatedPost['image_path']);
+        }
+
+        if ($updatedPost) {
+            $updatedPost['is_liked'] = (bool)($updatedPost['is_liked'] ?? false);
+            $updatedPost['like_count'] = (int)($updatedPost['like_count'] ?? 0);
         }
 
         echo json_encode([
@@ -203,7 +210,8 @@ class PostController extends Controller {
             'post' => $updatedPost
         ]);
     }
-        public function delete() {
+
+    public function delete() {
         header('Content-Type: application/json');
 
         $user = Session::get('user');
@@ -244,6 +252,57 @@ class PostController extends Controller {
         $this->removeImageFiles($imagePath);
 
         echo json_encode(['success' => true]);
+    }
+
+    public function like() {
+        $this->handleLikeToggle(true);
+    }
+
+    public function unlike() {
+        $this->handleLikeToggle(false);
+    }
+
+    private function handleLikeToggle(bool $shouldLike): void {
+        header('Content-Type: application/json');
+
+        $user = Session::get('user');
+        if (!$user) {
+            http_response_code(401);
+            echo json_encode(['success' => false, 'error' => 'Unauthorized']);
+            return;
+        }
+
+        $postId = (int)($_POST['id'] ?? 0);
+        if ($postId < 1) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Invalid post ID']);
+            return;
+        }
+
+        $post = Post::find($postId);
+        if (!$post) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'Post not found']);
+            return;
+        }
+
+        $result = $shouldLike
+            ? Post::like($postId, (int)$user['id'])
+            : Post::unlike($postId, (int)$user['id']);
+
+        if (!$result) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Unable to update like status.']);
+            return;
+        }
+
+        $summary = Post::getLikeSummary($postId, (int)$user['id']);
+
+        echo json_encode([
+            'success' => true,
+            'is_liked' => $summary['is_liked'],
+            'like_count' => $summary['like_count'],
+        ]);
     }
 
     private function removeImageFiles(?string $imagePath): void {

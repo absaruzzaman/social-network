@@ -98,6 +98,38 @@ ob_start();
 .post-actions .delete-btn:hover {
     background: #b91c1c;
 }
+.post-footer {
+    display: flex;
+    align-items: center;
+    margin-top: 12px;
+}
+.like-btn {
+    background: #f3f4f6;
+    color: #111827;
+    border: 1px solid #e5e7eb;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.like-btn .like-count {
+    font-weight: 600;
+    color: #111827;
+}
+.like-btn.liked {
+    background: #fee2e2;
+    border-color: #fecaca;
+    color: #b91c1c;
+}
+.like-btn:hover {
+    background: #e5e7eb;
+}
+.like-btn.liked:hover {
+    background: #fecaca;
+}
 .post-content {
     color: #1f2937;
     line-height: 1.6;
@@ -247,7 +279,7 @@ const cancelEditBtn = document.getElementById('cancelEdit');
 const postsContainer = document.getElementById('postsContainer');
 const followStateByUser = new Map();
 
-function generatePostHtml(post, timeAgo, imageHtml, actionsHtml, followButtonHtml) {
+function generatePostHtml(post, timeAgo, imageHtml, actionsHtml, followButtonHtml, likeButtonHtml) {
     return `
         <div class="post-header">
             <div class="post-meta">
@@ -261,6 +293,9 @@ function generatePostHtml(post, timeAgo, imageHtml, actionsHtml, followButtonHtm
         </div>
         <div class="post-content">${escapeHtml(post.content)}</div>
         ${imageHtml}
+        <div class="post-footer">
+            ${likeButtonHtml}
+        </div>
     `;
 }
 
@@ -320,6 +355,63 @@ function setFollowingState(userId, isFollowing) {
     });
 }
 
+function buildLikeButton(post) {
+    const liked = Boolean(post.is_liked);
+    const count = Number.isFinite(post.like_count) ? post.like_count : 0;
+    const icon = liked ? '♥' : '♡';
+    const label = liked ? 'Unlike' : 'Like';
+
+    return `<button type="button" class="like-btn${liked ? ' liked' : ''}" data-post-id="${post.id}" data-liked="${liked ? 'true' : 'false'}"><span class="like-icon">${icon}</span> <span class="like-label">${label}</span> · <span class="like-count">${count}</span></button>`;
+}
+
+function setLikeState(postId, isLiked, likeCount) {
+    const post = postsById.get(postId);
+    if (post) {
+        post.is_liked = isLiked;
+        post.like_count = likeCount;
+    }
+
+    document.querySelectorAll(`.like-btn[data-post-id="${postId}"]`).forEach(button => {
+        button.dataset.liked = isLiked ? 'true' : 'false';
+        button.classList.toggle('liked', isLiked);
+        const icon = button.querySelector('.like-icon');
+        const label = button.querySelector('.like-label');
+        const count = button.querySelector('.like-count');
+        if (icon) icon.textContent = isLiked ? '♥' : '♡';
+        if (label) label.textContent = isLiked ? 'Unlike' : 'Like';
+        if (count) count.textContent = likeCount;
+    });
+}
+
+function attachLikeHandler(card, post) {
+    const likeBtn = card.querySelector('.like-btn');
+    if (!likeBtn) return;
+
+    likeBtn.addEventListener('click', async () => {
+        const isLiked = likeBtn.dataset.liked === 'true';
+        const endpoint = isLiked ? '/posts/unlike' : '/posts/like';
+
+        const formData = new FormData();
+        formData.append('id', post.id);
+
+        try {
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                body: formData
+            });
+
+            const data = await response.json();
+            if (!data.success) {
+                throw new Error(data.error || 'Unable to update like');
+            }
+
+            setLikeState(post.id, data.is_liked, data.like_count);
+        } catch (error) {
+            window.alert('Failed to update like: ' + error.message);
+        }
+    });
+}
+
 function buildFollowButton(userId, isFollowing = false) {
     const following = getFollowingState(userId, isFollowing);
     const followingClass = following ? ' following' : '';
@@ -362,6 +454,7 @@ function attachPostActions(card, post) {
     attachEditHandler(card, post);
     attachDeleteHandler(card, post);
     attachFollowHandler(card, post);
+    attachLikeHandler(card, post);
 }
 
 function buildPostCard(post) {
@@ -383,10 +476,12 @@ function buildPostCard(post) {
         ? ''
         : buildFollowButton(post.user_id, post.is_following);
 
+    const likeButtonHtml = buildLikeButton(post);
+
     const actionsHtml = post.user_id === currentUserId
         ? `<div class="post-actions"><button type="button" class="edit-btn" data-post-id="${post.id}">Edit</button><button type="button" class="delete-btn" data-post-id="${post.id}">Delete</button></div>`
         : '';
-    postCard.innerHTML = generatePostHtml(post, timeAgo, imageHtml, actionsHtml, followButtonHtml);
+    postCard.innerHTML = generatePostHtml(post, timeAgo, imageHtml, actionsHtml, followButtonHtml, likeButtonHtml);
     attachPostActions(postCard, post);
     return postCard;
 }
@@ -394,23 +489,9 @@ function buildPostCard(post) {
 function updatePostCard(post) {
     const card = document.querySelector(`[data-post-id="${post.id}"]`);
     if (!card) return;
-
-    postsById.set(post.id, post);
-
-    const postDate = new Date(post.created_at);
-    const timeAgo = getTimeAgo(postDate);
-    const rawImagePath = (post.image_url || post.image_path || '').trim();
-    const imageHtml = rawImagePath !== ''
-        ? `<div class="post-image"><img src="${escapeHtml(rawImagePath)}" alt="Post image" loading="lazy"></div>`
-        : '';
-    const actionsHtml = post.user_id === currentUserId
-        ? `<div class="post-actions"><button type="button" class="edit-btn" data-post-id="${post.id}">Edit</button><button type="button" class="delete-btn" data-post-id="${post.id}">Delete</button></div>`
-        : '';
-
-    card.innerHTML = generatePostHtml(post, timeAgo, imageHtml, actionsHtml, '');
-    attachPostActions(card, post);
+    const newCard = buildPostCard(post);
+    card.replaceWith(newCard);
 }
-
 
 async function loadPosts() {
     if (isLoading || !hasMore) return;

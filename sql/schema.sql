@@ -20,6 +20,16 @@ CREATE TABLE IF NOT EXISTS `posts` (
   INDEX `idx_created_at` (`created_at` DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Post likes table
+CREATE TABLE IF NOT EXISTS `likes` (
+  `post_id` INT UNSIGNED NOT NULL,
+  `user_id` INT UNSIGNED NOT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`post_id`, `user_id`),
+  FOREIGN KEY (`post_id`) REFERENCES `posts`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- Follows table
 CREATE TABLE IF NOT EXISTS `follows` (
   `follower_id` INT UNSIGNED NOT NULL,

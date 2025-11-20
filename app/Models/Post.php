@@ -52,12 +52,20 @@ class Post {
         $pdo = self::connect();
         $stmt = $pdo->prepare('
             SELECT
-                p.*, 
+                p.*,
                 u.name as user_name,
-                CASE WHEN f.follower_id IS NULL THEN 0 ELSE 1 END AS is_following
+                CASE WHEN f.follower_id IS NULL THEN 0 ELSE 1 END AS is_following,
+                COALESCE(l.like_count, 0) AS like_count,
+                CASE WHEN ul.user_id IS NULL THEN 0 ELSE 1 END AS is_liked
             FROM posts p
             JOIN users u ON p.user_id = u.id
             LEFT JOIN follows f ON f.following_id = p.user_id AND f.follower_id = :current_user_id
+            LEFT JOIN (
+                SELECT post_id, COUNT(*) AS like_count
+                FROM likes
+                GROUP BY post_id
+            ) l ON l.post_id = p.id
+            LEFT JOIN likes ul ON ul.post_id = p.id AND ul.user_id = :current_user_id
             ORDER BY p.created_at DESC
             LIMIT :limit OFFSET :offset
         ');
@@ -67,6 +75,7 @@ class Post {
         $stmt->execute();
         return $stmt->fetchAll();
     }
+
     public static function find(int $id): ?array {
         $pdo = self::connect();
         $stmt = $pdo->prepare('SELECT * FROM posts WHERE id = :id LIMIT 1');
@@ -77,16 +86,28 @@ class Post {
         return $post !== false ? $post : null;
     }
 
-    public static function findWithUser(int $id): ?array {
+    public static function findWithUser(int $id, ?int $currentUserId = null): ?array {
         $pdo = self::connect();
         $stmt = $pdo->prepare('
             SELECT p.*, u.name as user_name
+            SELECT
+                p.*,
+                u.name as user_name,
+                COALESCE(l.like_count, 0) AS like_count,
+                CASE WHEN ul.user_id IS NULL THEN 0 ELSE 1 END AS is_liked
             FROM posts p
             JOIN users u ON p.user_id = u.id
+            LEFT JOIN (
+                SELECT post_id, COUNT(*) AS like_count
+                FROM likes
+                GROUP BY post_id
+            ) l ON l.post_id = p.id
+            LEFT JOIN likes ul ON ul.post_id = p.id AND ul.user_id = :current_user_id
             WHERE p.id = :id
             LIMIT 1
         ');
         $stmt->bindValue(':id', $id, PDO::PARAM_INT);
+        $stmt->bindValue(':current_user_id', $currentUserId, $currentUserId === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
         $stmt->execute();
 
         $post = $stmt->fetch();
@@ -119,5 +140,50 @@ class Post {
         $stmt->execute();
 
         return $stmt->rowCount() > 0;
+    }
+
+    public static function like(int $postId, int $userId): bool {
+        $pdo = self::connect();
+        $stmt = $pdo->prepare('
+            INSERT INTO likes (post_id, user_id)
+            VALUES (:post_id, :user_id)
+            ON DUPLICATE KEY UPDATE created_at = VALUES(created_at)
+        ');
+        $stmt->bindValue(':post_id', $postId, PDO::PARAM_INT);
+        $stmt->bindValue(':user_id', $userId, PDO::PARAM_INT);
+        $stmt->execute();
+
+        return $stmt->rowCount() > 0;
+    }
+
+    public static function unlike(int $postId, int $userId): bool {
+        $pdo = self::connect();
+        $stmt = $pdo->prepare('DELETE FROM likes WHERE post_id = :post_id AND user_id = :user_id');
+        $stmt->bindValue(':post_id', $postId, PDO::PARAM_INT);
+        $stmt->bindValue(':user_id', $userId, PDO::PARAM_INT);
+        $stmt->execute();
+
+        return $stmt->rowCount() > 0;
+    }
+
+    public static function getLikeSummary(int $postId, ?int $userId = null): array {
+        $pdo = self::connect();
+        $stmt = $pdo->prepare('
+            SELECT
+                COUNT(*) AS like_count,
+                SUM(CASE WHEN user_id = :user_id THEN 1 ELSE 0 END) AS user_like_count
+            FROM likes
+            WHERE post_id = :post_id
+        ');
+        $stmt->bindValue(':post_id', $postId, PDO::PARAM_INT);
+        $stmt->bindValue(':user_id', $userId, $userId === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
+        $stmt->execute();
+
+        $result = $stmt->fetch();
+
+        return [
+            'like_count' => (int)($result['like_count'] ?? 0),
+            'is_liked' => ((int)($result['user_like_count'] ?? 0)) > 0,
+        ];
     }
 }
