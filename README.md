@@ -73,19 +73,10 @@ Important files
 - Models: [app/Models/](app/Models/)
 - Views: [app/Views/](app/Views/)
 - Mailer helper: [app/Core/Mailer.php](app/Core/Mailer.php)
-- Static assets: [public/assets/](public/assets/) and [assets/](assets/)
+- Static assets: [public/assets/](public/assets/)
 
 Usage notes
 -----------
 - Open the app in a browser after starting the server and register a new user to test posting, liking, and following flows.
 - Static assets are in `public/assets/` and project-level `assets/`.
 - Mailer: outgoing email (if configured) is handled by `app/Core/Mailer.php`.
-
-Contributing / Next steps
--------------------------
-- Add tests and/or a `docker-compose.yml` for reproducible dev environments.
-- Add environment configuration files for DB and mail credentials (currently set in app bootstrap).
-
-License
--------
-See project owner or assignment guidelines.
