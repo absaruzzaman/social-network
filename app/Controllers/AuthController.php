@@ -25,8 +25,8 @@ class AuthController extends Controller {
             echo "Invalid email address.";
             return;
         }
-        if (strlen($password) < 6) {
-            echo "Password must be at least 6 characters.";
+        if (strlen($password) < 5) {
+            echo "Password must be at least 5 characters.";
             return;
         }
 
@@ -34,7 +34,7 @@ class AuthController extends Controller {
         User::create($name, $email, $hashed);
 
         // send welcome email (Mailtrap for dev)
-        Mailer::send($email, 'Welcome to AuthBoard', "Hello $name,\n\nThanks for registering at AuthBoard.");
+        Mailer::send($email, 'Welcome to Social Network', "Hello $name,\n\nThanks for registering at Social Network.");
 
         header('Location: /login');
     }

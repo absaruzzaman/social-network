@@ -31,6 +31,11 @@ $router = new Router();
 $auth = new AuthController();
 $dash = new DashboardController();
 $posts = new PostController();
+$userController = new \App\Controllers\UserController();
+
+$router->post('/users/follow', fn() => $userController->follow());
+$router->post('/users/unfollow', fn() => $userController->unfollow());
+
 
 $router->get('/', fn() => $auth->showLogin());
 $router->get('/login', fn() => $auth->showLogin());
@@ -41,6 +46,9 @@ $router->get('/test-mail', fn() => $dash->testMail());
 $router->get('/posts', fn() => $posts->index());
 $router->post('/posts', fn() => $posts->create());
 $router->post('/posts/update', fn() => $posts->update());
+$router->post('/posts/like', fn() => $posts->like());
+$router->post('/posts/unlike', fn() => $posts->unlike());
+
 $router->get('/api/posts', fn() => $posts->getPosts());
 
 $router->post('/register', fn() => $auth->register());

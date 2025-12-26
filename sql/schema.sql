@@ -1,4 +1,4 @@
--- SQL schema for AuthBoard
+-- SQL schema for a simple social networking application
 CREATE TABLE IF NOT EXISTS `users` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `name` VARCHAR(100) NOT NULL,

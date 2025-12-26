@@ -1,6 +1,6 @@
 <?php
 use App\Core\Session;
-$title = 'Dashboard | AuthBoard';
+$title = 'Dashboard | Social Network';
 ob_start();
 ?>
 

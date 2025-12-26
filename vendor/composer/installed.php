@@ -3,7 +3,7 @@
         'name' => 'authboard/project',
         'pretty_version' => 'dev-main',
         'version' => 'dev-main',
-        'reference' => '6949e4bb90394d4d1cb9a9d0f1731b7429bd0451',
+        'reference' => 'd99e179eb79f4b1382b400b10642ec93c93a2f03',
         'type' => 'library',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
@@ -13,7 +13,7 @@
         'authboard/project' => array(
             'pretty_version' => 'dev-main',
             'version' => 'dev-main',
-            'reference' => '6949e4bb90394d4d1cb9a9d0f1731b7429bd0451',
+            'reference' => 'd99e179eb79f4b1382b400b10642ec93c93a2f03',
             'type' => 'library',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),

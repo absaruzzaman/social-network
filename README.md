@@ -1,44 +1,91 @@
-# AuthBoard - Mini PHP Auth Project
+Metro Web Board (metro_wb_lab)
+=================================
 
-PHP version: 8.0+ (tested with PHP 8)
-A small teaching project demonstrating:
-- Registration & Login
-- Sessions
-- Simple Router
-- Namespaces & PSR-4 autoloading (composer)
-- Password hashing (password_hash)
-- Email sending (Mailtrap + PHPMailer)
-- Basic folder structure and simple styling
+Small PHP web application for a simple posts/dashboard system used for coursework.
 
-## Requirements
-- PHP 8.0+
-- Composer (for dependencies)
+Requirements
+------------
+- PHP 7.4+ (or compatible)
+- Composer
 - MySQL (or MariaDB)
-- Local webserver (XAMPP, Laragon, etc.)
+- Optional: XAMPP/WAMP for Apache + PHP
 
-## Setup
-1. Unzip the project into your web root (or point your vhost to `AuthBoard/public`).
-2. Copy `.env.example` to `.env` and fill values (DB and Mailtrap credentials).
-3. Create the database and import `sql/schema.sql`.
-   Example:
-   ```sql
-   CREATE DATABASE authboard;
-   USE authboard;
-   -- then import the schema.sql file
-   ```
-4. Install composer dependencies:
-   ```bash
-   composer install
-   ```
-5. Start the server (if using built-in PHP server for testing):
-   ```bash
-   cd public
-   php -S localhost:8000
-   ```
-6. Visit `http://localhost:8000` (or your configured vhost).
+Quick setup
+-----------
+1. Install PHP dependencies (if any):
 
-## Notes for instructors
-- Students should update `.env` with their Mailtrap sandbox credentials.
-- The project uses a tiny .env loader (no external dotenv package required).
-- Encourage students to read files under `app/` to understand flow.
+```bash
+composer install
+```
 
+2. Create a database and import schema + seed data:
+
+Windows (MySQL):
+
+```powershell
+mysql -u root -p < sql/schema.sql
+mysql -u root -p < sql/seed_posts.sql
+```
+
+Adjust the DB user/password as needed in your environment.
+
+Running locally (built-in PHP server)
+-----------------------------------
+From the project root run (serves `public/`):
+
+```bash
+php -S localhost:8000 -t public
+```
+
+Then open http://localhost:8000 in your browser.
+
+If you use XAMPP/WAMP/Apache, put the project `public/` as the document root (or configure a virtual host) and start Apache/MySQL from the control panel.
+
+Stopping the server
+-------------------
+- If you started the built-in PHP server in a terminal, stop it with Ctrl+C.
+- If you closed the terminal, find the process by port and kill it (Windows):
+
+```powershell
+netstat -ano | findstr :8000
+taskkill /PID <PID> /F
+# or kill all php processes
+taskkill /IM php.exe /F
+```
+
+Features (implemented)
+----------------------
+- User authentication: register (sign up) and login with session support. See `app/Controllers/AuthController.php` and views in `app/Views/auth/`.
+- Posts: authenticated users can create posts and see a posts listing. See `app/Controllers/PostController.php` and `app/Models/Post.php`.
+- Like / Unlike: users can like or unlike posts (toggle behavior implemented in controllers/models).
+- Follow / Unfollow: users can follow and unfollow other users; follow relationships are tracked in the DB.
+
+Database and seeds
+------------------
+- Schema file: `sql/schema.sql` (includes tables for users, posts, likes, follows).
+- Example seed data: `sql/seed_posts.sql`.
+
+Important files
+---------------
+- Front controller: [public/index.php](public/index.php)
+- App code: [app/](app/)
+- Controllers: [app/Controllers/](app/Controllers/)
+- Models: [app/Models/](app/Models/)
+- Views: [app/Views/](app/Views/)
+- Mailer helper: [app/Core/Mailer.php](app/Core/Mailer.php)
+- Static assets: [public/assets/](public/assets/) and [assets/](assets/)
+
+Usage notes
+-----------
+- Open the app in a browser after starting the server and register a new user to test posting, liking, and following flows.
+- Static assets are in `public/assets/` and project-level `assets/`.
+- Mailer: outgoing email (if configured) is handled by `app/Core/Mailer.php`.
+
+Contributing / Next steps
+-------------------------
+- Add tests and/or a `docker-compose.yml` for reproducible dev environments.
+- Add environment configuration files for DB and mail credentials (currently set in app bootstrap).
+
+License
+-------
+See project owner or assignment guidelines.
